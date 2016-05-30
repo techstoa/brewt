@@ -1,9 +1,5 @@
 #!/usr/bin/python
 
-from itertools import permutations
-
-wordlist = []
-
 def setup():
     import argparse
     parser = argparse.ArgumentParser(description='usage: %prog [options]')
@@ -19,6 +15,7 @@ def setup():
 def generate_list(wordlist, min_words, max_words):
     """Cycle through each password, then all permutations of combining two passwords, 
     then 3, etc up to the length of the array."""
+    from itertools import permutations
     mylist = []
     for i in xrange(min_words,max_words):
         for p in permutations(wordlist, i):
@@ -28,6 +25,7 @@ def generate_list(wordlist, min_words, max_words):
 def main():
     options = setup()
 
+    wordlist = []
     # Build an array of all known passwords
     f = open(options.passfile)
     for line in f.readlines():
