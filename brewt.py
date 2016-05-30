@@ -16,6 +16,15 @@ def setup():
     args = parser.parse_args()
     return args
 
+def generate_list(wordlist, min_words, max_words):
+    """Cycle through each password, then all permutations of combining two passwords, 
+    then 3, etc up to the length of the array."""
+    mylist = []
+    for i in xrange(min_words,max_words):
+        for p in permutations(wordlist, i):
+            mylist.append(''.join(p))
+    return mylist
+
 def main():
     options = setup()
 
@@ -30,11 +39,8 @@ def main():
         # Add 1 since the length is 0 indexed
         maxwords = len(wordlist)
 
-    # Cycle through each password, then all permutations of
-    # combining two passwords, then 3, etc up to the length of the array.
-    for i in xrange(options.minwords,maxwords+1):
-        for p in permutations(wordlist, i):
-            print ''.join(p)
+    for word in generate_list(wordlist, options.minwords, maxwords):
+        print word
 
 if __name__ == '__main__':
     main()
