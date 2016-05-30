@@ -11,6 +11,8 @@ def setup():
             help="Minimum number of words to use in combinations.")
     parser.add_argument('--maxwords', type=int, 
             help="Maximum number of words to use in combinations.")
+    parser.add_argument('--verbose', '-v', action="store_true",
+            help="Verbose Output")
     args = parser.parse_args()
     return args
 
@@ -27,10 +29,10 @@ def main():
         wordlist.append(line.strip('\n'))
 
     if options.maxwords:
-        maxwords = options.maxwords
+        maxwords = options.maxwords+1
     else:
         # Add 1 since the length is 0 indexed
-        maxwords = len(wordlist)
+        maxwords = len(wordlist)+1
 
     gpg = gnupg.GPG()
 
@@ -40,12 +42,16 @@ def main():
     for word in generate_list(wordlist, options.minwords, maxwords):
         fd.seek(0, 0)
         status = gpg.decrypt_file(fd, word)
-        print "%s: %s" % (word, status.ok)
+        if options.verbose:
+            print "%s: %s" % (word, status.ok) 
         if status.ok:
             password = word
             break
 
-    print password
+    if password:
+        print "Password is %s", password
+    else:
+        print "Password not found"
 
 
 if __name__ == '__main__':
