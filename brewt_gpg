@@ -49,7 +49,7 @@ def main():
             break
 
     if password:
-        print "Password is %s", password
+        print "Password is %s" % password
     else:
         print "Password not found"
 
