@@ -41,7 +41,7 @@ def main():
 
     for word in generate_list(wordlist, options.minwords, maxwords):
         fd.seek(0, 0)
-        status = gpg.decrypt_file(fd, word)
+        status = gpg.decrypt_file(fd, passphrase=word)
         if options.verbose:
             print "%s: %s" % (word, status.ok) 
         if status.ok:
