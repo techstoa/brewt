@@ -2,4 +2,53 @@ This tool takes a file containing a list of password, and generates a
 brute force password list containing the passwords and combinations of the
 passwords using 2 words, 3 words, etc.
 
-brewt_gpg can attempt to decrypt a GPG encrypted file by using the generated passwords
+brewt_gpg can attempt to decrypt a GPG encrypted file by using the generated 
+passwords
+
+$ cat test.txt
+foo
+bar
+baz
+bing
+
+$ ./brewt.py -p test.txt
+foo
+bar
+baz
+bing
+foobar
+foobaz
+foobing
+barfoo
+barbaz
+barbing
+bazfoo
+bazbar
+bazbing
+bingfoo
+bingbar
+bingbaz
+foobarbaz
+foobarbing
+foobazbar
+foobazbing
+foobingbar
+foobingbaz
+barfoobaz
+barfoobing
+barbazfoo
+barbazbing
+barbingfoo
+barbingbaz
+bazfoobar
+bazfoobing
+bazbarfoo
+bazbarbing
+bazbingfoo
+bazbingbar
+bingfoobar
+bingfoobaz
+bingbarfoo
+bingbarbaz
+bingbazfoo
+bingbazbar
