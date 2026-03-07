@@ -1,2 +1,9 @@
 .coverage
 __pycache__/
+brewt.egg-info/
+build
+.venv/
+.pytest_cache/
+dist/
+*.pyc
+*.pyo
