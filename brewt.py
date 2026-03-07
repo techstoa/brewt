@@ -21,19 +21,40 @@ def setup():
                         help="Verbose output (GPG mode only).")
     parser.add_argument('--debug', '-d', action='store_true',
                         help="Print each password before using it.")
+    parser.add_argument('--mixcase', '-c', action='store_true',
+                        help="Try all upper/lower case variations.")
     args = parser.parse_args()
     return args
 
 
-def generate_list(wordlist, min_words, max_words):
+def case_variants(word):
+    """Generate all upper/lower case combinations for a word.
+
+    For example, 'ab' yields 'ab', 'Ab', 'aB', 'AB'.
+    Non-alpha characters contribute only one variant.
+    """
+    from itertools import product
+    char_options = []
+    for ch in word:
+        if ch.isalpha():
+            char_options.append((ch.lower(), ch.upper()))
+        else:
+            char_options.append((ch,))
+    for combo in product(*char_options):
+        yield ''.join(combo)
+
+
+def generate_list(wordlist, min_words, max_words, mixcase=False):
     """Cycle through each password, then all permutations of combining two
     passwords, then 3, etc up to the length of the array."""
     from itertools import permutations
-    mylist = []
     for i in range(min_words, max_words):
         for current_option in permutations(wordlist, i):
-            mylist.append(''.join(current_option))
-    return mylist
+            password = ''.join(current_option)
+            if mixcase:
+                yield from case_variants(password)
+            else:
+                yield password
 
 
 def main():
@@ -47,7 +68,8 @@ def main():
 
     if options.file:
         password = False
-        for word in generate_list(wordlist, options.minwords, maxwords):
+        for word in generate_list(wordlist, options.minwords, maxwords,
+                                  options.mixcase):
             if options.debug:
                 print("Trying: %s" % word)
             result = subprocess.run(
@@ -68,7 +90,8 @@ def main():
         else:
             print("Password not found")
     else:
-        for word in generate_list(wordlist, options.minwords, maxwords):
+        for word in generate_list(wordlist, options.minwords, maxwords,
+                                  options.mixcase):
             print(word)
 
 
