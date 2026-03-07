@@ -17,6 +17,8 @@ def setup():
                         help="GPG file to decrypt (enables GPG mode).")
     parser.add_argument('--verbose', '-v', action='store_true',
                         help="Verbose output (GPG mode only).")
+    parser.add_argument('--debug', '-d', action='store_true',
+                        help="Print each password before using it.")
     args = parser.parse_args()
     return args
 
@@ -47,6 +49,8 @@ def main():
         with open(options.file) as file_handle:
             password = False
             for word in generate_list(wordlist, options.minwords, maxwords):
+                if options.debug:
+                    print("Trying: %s" % word)
                 file_handle.seek(0, 0)
                 status = gpg.decrypt_file(file_handle, passphrase=word)
                 if options.verbose:
