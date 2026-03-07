@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 def setup():
     """parse arguments"""
@@ -17,6 +17,7 @@ def setup():
     args = parser.parse_args()
     return args
 
+
 def main():
     """Non-module logic for running as a commandline tool"""
     from brewt import generate_list
@@ -31,10 +32,10 @@ def main():
         wordlist.append(line.strip('\n'))
 
     if options.maxwords:
-        maxwords = options.maxwords+1
+        maxwords = options.maxwords + 1
     else:
-        # Add 1 since the length is 0 indexed
-        maxwords = len(wordlist)+1
+        # Add 1 since range() is exclusive at the upper bound
+        maxwords = len(wordlist) + 1
 
     gpg = gnupg.GPG()
 
@@ -45,16 +46,16 @@ def main():
         file_handle.seek(0, 0)
         status = gpg.decrypt_file(file_handle, passphrase=word)
         if options.verbose:
-            print "%s: %s" % (word, status.ok)
+            print("%s: %s" % (word, status.ok))
         if status.ok:
             password = word
             break
 
     if password:
-        print "Password is %s" % password
+        print("Password is %s" % password)
     else:
-        print "Password not found"
+        print("Password not found")
 
 
-if __name__ == '__main__':
+if __name__ == '__main__':  # pragma: no cover
     main()
