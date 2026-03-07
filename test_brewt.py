@@ -1,6 +1,6 @@
 """Tests for brewt.py"""
 import sys
-import types
+import subprocess
 import unittest.mock as mock
 
 import pytest
@@ -25,10 +25,10 @@ def _make_gpg_file(tmp_path, content=b'encrypted'):
     return str(p)
 
 
-def _make_status(ok):
-    status = mock.MagicMock()
-    status.ok = ok
-    return status
+def _make_proc(returncode):
+    result = mock.MagicMock(spec=subprocess.CompletedProcess)
+    result.returncode = returncode
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -159,17 +159,17 @@ def test_main_strips_whitespace(monkeypatch, tmp_path, capsys):
 # main — GPG mode (--file provided)
 # ---------------------------------------------------------------------------
 
-def _setup_gpg_mock(monkeypatch, decrypt_results=None):
-    """Inject a mocked gnupg module and return the gpg instance mock."""
-    gpg_mock = mock.MagicMock()
-    if decrypt_results is not None:
-        gpg_mock.decrypt_file.side_effect = decrypt_results
+def _setup_gpg_mock(monkeypatch, returncodes=None):
+    """Mock subprocess.run; returncodes is a list of return codes per call.
+    If omitted, all calls return failure (rc=1)."""
+    if returncodes is None:
+        run_mock = mock.MagicMock(return_value=_make_proc(1))
     else:
-        gpg_mock.decrypt_file.return_value = _make_status(False)
-    gnupg_mod = types.ModuleType('gnupg')
-    gnupg_mod.GPG = mock.MagicMock(return_value=gpg_mock)
-    monkeypatch.setitem(sys.modules, 'gnupg', gnupg_mod)
-    return gpg_mock
+        run_mock = mock.MagicMock(
+            side_effect=[_make_proc(rc) for rc in returncodes]
+        )
+    monkeypatch.setattr('brewt.subprocess.run', run_mock)
+    return run_mock
 
 
 def test_main_gpg_password_found(monkeypatch, tmp_path, capsys):
@@ -179,28 +179,41 @@ def test_main_gpg_password_found(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(
         sys, 'argv', ['brewt', '-p', passfile, '-f', gpg_file]
     )
-    gpg_mock = _setup_gpg_mock(
-        monkeypatch,
-        decrypt_results=[_make_status(False), _make_status(True)]
-    )
+    run_mock = _setup_gpg_mock(monkeypatch, returncodes=[1, 0])
     brewt.main()
     out = capsys.readouterr().out
     assert 'right' in out
-    assert gpg_mock.decrypt_file.call_count == 2
+    assert run_mock.call_count == 2
 
 
-def test_main_gpg_file_opened_binary(monkeypatch, tmp_path):
-    """GPG file must be opened in binary mode (encrypted data is not UTF-8)."""
+def test_main_gpg_uses_pinentry_loopback(monkeypatch, tmp_path):
+    """subprocess.run is called with --pinentry-mode loopback."""
     passfile = _make_passfile(tmp_path, ['pw'])
-    gpg_file = _make_gpg_file(tmp_path, content=bytes(range(256)))
+    gpg_file = _make_gpg_file(tmp_path)
     monkeypatch.setattr(
         sys, 'argv', ['brewt', '-p', passfile, '-f', gpg_file]
     )
-    gpg_mock = _setup_gpg_mock(monkeypatch)
-    # Would raise UnicodeDecodeError if opened in text mode
+    run_mock = _setup_gpg_mock(monkeypatch, returncodes=[0])
     brewt.main()
-    handle = gpg_mock.decrypt_file.call_args[0][0]
-    assert handle.mode == 'rb'
+    cmd = run_mock.call_args[0][0]
+    assert '--pinentry-mode' in cmd
+    assert 'loopback' in cmd
+
+
+def test_main_gpg_passphrase_via_stdin(monkeypatch, tmp_path):
+    """Passphrase is passed via stdin (--passphrase-fd 0), not as an arg."""
+    passfile = _make_passfile(tmp_path, ['secret'])
+    gpg_file = _make_gpg_file(tmp_path)
+    monkeypatch.setattr(
+        sys, 'argv', ['brewt', '-p', passfile, '-f', gpg_file]
+    )
+    run_mock = _setup_gpg_mock(monkeypatch, returncodes=[0])
+    brewt.main()
+    kwargs = run_mock.call_args[1]
+    assert kwargs['input'] == b'secret'
+    cmd = run_mock.call_args[0][0]
+    assert '--passphrase-fd' in cmd
+    assert 'secret' not in cmd  # must NOT appear in the command line
 
 
 def test_main_gpg_password_not_found(monkeypatch, tmp_path, capsys):
@@ -210,7 +223,7 @@ def test_main_gpg_password_not_found(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(
         sys, 'argv', ['brewt', '-p', passfile, '-f', gpg_file]
     )
-    _setup_gpg_mock(monkeypatch)
+    _setup_gpg_mock(monkeypatch)  # default: all calls fail
     brewt.main()
     assert 'Password not found' in capsys.readouterr().out
 
@@ -222,10 +235,7 @@ def test_main_gpg_verbose(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(
         sys, 'argv', ['brewt', '-p', passfile, '-f', gpg_file, '--verbose']
     )
-    _setup_gpg_mock(
-        monkeypatch,
-        decrypt_results=[_make_status(False), _make_status(True)]
-    )
+    _setup_gpg_mock(monkeypatch, returncodes=[1, 0])
     brewt.main()
     out = capsys.readouterr().out
     assert 'x:' in out
@@ -240,10 +250,10 @@ def test_main_gpg_with_maxwords(monkeypatch, tmp_path, capsys):
         sys, 'argv',
         ['brewt', '-p', passfile, '-f', gpg_file, '--maxwords', '1']
     )
-    gpg_mock = _setup_gpg_mock(monkeypatch)
+    run_mock = _setup_gpg_mock(monkeypatch, returncodes=[1, 1, 1])
     brewt.main()
     # maxwords=1 → range(1, 2) → 3 single-word attempts
-    assert gpg_mock.decrypt_file.call_count == 3
+    assert run_mock.call_count == 3
     assert 'Password not found' in capsys.readouterr().out
 
 
@@ -254,10 +264,7 @@ def test_main_gpg_debug(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(
         sys, 'argv', ['brewt', '-p', passfile, '-f', gpg_file, '--debug']
     )
-    _setup_gpg_mock(
-        monkeypatch,
-        decrypt_results=[_make_status(False), _make_status(True)]
-    )
+    _setup_gpg_mock(monkeypatch, returncodes=[1, 0])
     brewt.main()
     out = capsys.readouterr().out
     assert 'Trying: x' in out

@@ -2,6 +2,8 @@
 
 """Script for generating password possibilities"""
 
+import subprocess
+
 
 def setup():
     """parse arguments"""
@@ -44,20 +46,23 @@ def main():
     maxwords = options.maxwords + 1 if options.maxwords else len(wordlist) + 1
 
     if options.file:
-        import gnupg
-        gpg = gnupg.GPG()
-        with open(options.file, 'rb') as file_handle:
-            password = False
-            for word in generate_list(wordlist, options.minwords, maxwords):
-                if options.debug:
-                    print("Trying: %s" % word)
-                file_handle.seek(0, 0)
-                status = gpg.decrypt_file(file_handle, passphrase=word)
-                if options.verbose:
-                    print("%s: %s" % (word, status.ok))
-                if status.ok:
-                    password = word
-                    break
+        password = False
+        for word in generate_list(wordlist, options.minwords, maxwords):
+            if options.debug:
+                print("Trying: %s" % word)
+            result = subprocess.run(
+                ['gpg', '--batch', '--passphrase-fd', '0',
+                 '--pinentry-mode', 'loopback', '--quiet', '--decrypt',
+                 options.file],
+                input=word.encode(),
+                capture_output=True,
+            )
+            ok = result.returncode == 0
+            if options.verbose:
+                print("%s: %s" % (word, ok))
+            if ok:
+                password = word
+                break
         if password:
             print("Password is %s" % password)
         else:

@@ -8,7 +8,7 @@ version = "0.2.0"
 description = "Python module for generating password lists from potential options"
 authors = [{ name = "Gregory Boyce", email = "gregory@smoltech.us" }]
 requires-python = ">=3.8"
-dependencies = ["python-gnupg"]
+dependencies = []
 
 [project.urls]
 Homepage = "https://github.com/techstoa/brewt"
