@@ -59,7 +59,7 @@ def main():
             )
             ok = result.returncode == 0
             if options.verbose:
-                print("%s: %s" % (word, ok))
+                print(f"{word}: {ok}")
             if ok:
                 password = word
                 break
