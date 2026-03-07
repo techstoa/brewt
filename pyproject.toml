@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "brewt"
-version = "0.2.0"
+version = "0.2.1"
 description = "Python module for generating password lists from potential options"
 authors = [{ name = "Gregory Boyce", email = "gregory@smoltech.us" }]
 requires-python = ">=3.8"
