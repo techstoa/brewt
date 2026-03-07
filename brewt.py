@@ -1,6 +1,7 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 """Script for generating password possibilities"""
+
 
 def setup():
     """parse arguments"""
@@ -15,15 +16,17 @@ def setup():
     args = parser.parse_args()
     return args
 
+
 def generate_list(wordlist, min_words, max_words):
     """Cycle through each password, then all permutations of combining two
     passwords, then 3, etc up to the length of the array."""
     from itertools import permutations
     mylist = []
-    for i in xrange(min_words, max_words):
+    for i in range(min_words, max_words):
         for current_option in permutations(wordlist, i):
             mylist.append(''.join(current_option))
     return mylist
+
 
 def main():
     """Non-module logic for running as a commandline tool"""
@@ -42,7 +45,8 @@ def main():
         maxwords = len(wordlist)
 
     for word in generate_list(wordlist, options.minwords, maxwords):
-        print word
+        print(word)
+
 
 if __name__ == '__main__':
     main()
