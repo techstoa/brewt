@@ -15,7 +15,6 @@ Homepage = "https://github.com/gdfuego/brewt"
 
 [project.scripts]
 brewt = "brewt:main"
-brewt-gpg = "brewt_gpg:main"
 
 [tool.setuptools]
-py-modules = ["brewt", "brewt_gpg"]
+py-modules = ["brewt"]
