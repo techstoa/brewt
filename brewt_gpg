@@ -27,9 +27,9 @@ def main():
 
     wordlist = []
     # Build an array of all known passwords
-    file_handle = open(options.passfile)
-    for line in file_handle.readlines():
-        wordlist.append(line.strip('\n'))
+    with open(options.passfile) as file_handle:
+        for line in file_handle.readlines():
+            wordlist.append(line.strip('\n'))
 
     if options.maxwords:
         maxwords = options.maxwords + 1
@@ -39,17 +39,17 @@ def main():
 
     gpg = gnupg.GPG()
 
-    file_handle = open(options.file)
-    password = False
+    with open(options.file) as file_handle:
+        password = False
 
-    for word in generate_list(wordlist, options.minwords, maxwords):
-        file_handle.seek(0, 0)
-        status = gpg.decrypt_file(file_handle, passphrase=word)
-        if options.verbose:
-            print("%s: %s" % (word, status.ok))
-        if status.ok:
-            password = word
-            break
+        for word in generate_list(wordlist, options.minwords, maxwords):
+            file_handle.seek(0, 0)
+            status = gpg.decrypt_file(file_handle, passphrase=word)
+            if options.verbose:
+                print("%s: %s" % (word, status.ok))
+            if status.ok:
+                password = word
+                break
 
     if password:
         print("Password is %s" % password)

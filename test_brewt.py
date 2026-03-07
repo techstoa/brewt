@@ -100,11 +100,10 @@ def test_main_with_maxwords(monkeypatch, tmp_path, capsys):
     )
     brewt.main()
     output = capsys.readouterr().out.splitlines()
-    # maxwords=2 means range(1, 2) → only single-word entries
+    # maxwords=2 → range(1, 3) → single words and 2-word combos, but not 3
     assert 'cat' in output
-    assert 'dog' in output
-    assert 'bird' in output
-    assert 'catdog' not in output
+    assert 'catdog' in output
+    assert 'catdogbird' not in output
 
 
 def test_main_module_guard(monkeypatch, tmp_path):

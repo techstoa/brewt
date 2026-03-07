@@ -34,15 +34,15 @@ def main():
 
     wordlist = []
     # Build an array of all known passwords
-    file_handle = open(options.passfile)
-    for line in file_handle.readlines():
-        wordlist.append(line.strip('\n'))
+    with open(options.passfile) as file_handle:
+        for line in file_handle.readlines():
+            wordlist.append(line.strip('\n'))
 
     if options.maxwords:
-        maxwords = options.maxwords
+        maxwords = options.maxwords + 1
     else:
-        # Add 1 since the length is 0 indexed
-        maxwords = len(wordlist)
+        # Add 1 since range() is exclusive at the upper bound
+        maxwords = len(wordlist) + 1
 
     for word in generate_list(wordlist, options.minwords, maxwords):
         print(word)
