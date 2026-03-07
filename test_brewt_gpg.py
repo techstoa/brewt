@@ -1,30 +1,11 @@
 """Tests for brewt_gpg"""
-import importlib
 import sys
 import types
 import unittest.mock as mock
 
 import pytest
 
-
-# ---------------------------------------------------------------------------
-# Load brewt_gpg as a module (it has no .py extension)
-# ---------------------------------------------------------------------------
-
-def load_brewt_gpg():
-    import os
-    from importlib.machinery import SourceFileLoader
-    path = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), 'brewt_gpg'
-    )
-    loader = SourceFileLoader('brewt_gpg', path)
-    spec = importlib.util.spec_from_loader('brewt_gpg', loader)
-    module = importlib.util.module_from_spec(spec)
-    loader.exec_module(module)
-    return module
-
-
-brewt_gpg = load_brewt_gpg()
+import brewt_gpg
 
 
 # ---------------------------------------------------------------------------
@@ -183,5 +164,5 @@ def test_main_module_guard(monkeypatch, tmp_path):
     monkeypatch.setattr(
         'builtins.print', lambda *args, **kwargs: printed.append(args[0])
     )
-    runpy.run_path('brewt_gpg', run_name='__main__')
+    runpy.run_path('brewt_gpg.py', run_name='__main__')
     assert 'Password not found' in printed
