@@ -37,7 +37,7 @@ def main():
     options = setup()
 
     with open(options.passfile) as file_handle:
-        wordlist = [line.strip('\n') for line in file_handle.readlines()]
+        wordlist = [line.strip() for line in file_handle if line.strip()]
 
     maxwords = options.maxwords + 1 if options.maxwords else len(wordlist) + 1
 

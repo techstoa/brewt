@@ -129,6 +129,30 @@ def test_main_with_maxwords(monkeypatch, tmp_path, capsys):
     assert 'catdogbird' not in output
 
 
+def test_main_ignores_blank_lines(monkeypatch, tmp_path, capsys):
+    """Blank lines in the passfile are ignored."""
+    p = tmp_path / 'words.txt'
+    p.write_text('\ncat\n\ndog\n\n')
+    monkeypatch.setattr(sys, 'argv', ['brewt', '-p', str(p)])
+    brewt.main()
+    output = capsys.readouterr().out.splitlines()
+    assert 'cat' in output
+    assert 'dog' in output
+    assert '' not in output
+
+
+def test_main_strips_whitespace(monkeypatch, tmp_path, capsys):
+    """Leading/trailing whitespace and Windows line endings are stripped."""
+    p = tmp_path / 'words.txt'
+    p.write_bytes(b'cat\r\n dog \r\nbird\r\n')
+    monkeypatch.setattr(sys, 'argv', ['brewt', '-p', str(p)])
+    brewt.main()
+    output = capsys.readouterr().out.splitlines()
+    assert 'cat' in output
+    assert 'dog' in output
+    assert 'bird' in output
+
+
 # ---------------------------------------------------------------------------
 # main — GPG mode (--file provided)
 # ---------------------------------------------------------------------------
