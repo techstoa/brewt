@@ -118,7 +118,6 @@ def test_setup_defaults(monkeypatch):
     assert args.maxwords is None
     assert args.file is None
     assert args.verbose is False
-    assert args.debug is False
     assert args.mixcase is False
 
 
@@ -127,7 +126,7 @@ def test_setup_all_args(monkeypatch):
     monkeypatch.setattr(
         sys, 'argv',
         ['brewt', '-p', 'p.txt', '-f', 'f.gpg',
-         '--minwords', '2', '--maxwords', '4', '--verbose', '--debug',
+         '--minwords', '2', '--maxwords', '4', '--verbose',
          '--mixcase']
     )
     args = brewt.setup()
@@ -136,7 +135,7 @@ def test_setup_all_args(monkeypatch):
     assert args.minwords == 2
     assert args.maxwords == 4
     assert args.verbose is True
-    assert args.debug is True
+    assert args.verbose is True
     assert args.mixcase is True
 
 
@@ -304,20 +303,6 @@ def test_main_gpg_with_maxwords(monkeypatch, tmp_path, capsys):
     # maxwords=1 → range(1, 2) → 3 single-word attempts
     assert run_mock.call_count == 3
     assert 'Password not found' in capsys.readouterr().out
-
-
-def test_main_gpg_debug(monkeypatch, tmp_path, capsys):
-    """GPG mode with --debug prints each password before trying it."""
-    passfile = _make_passfile(tmp_path, ['x', 'y'])
-    gpg_file = _make_gpg_file(tmp_path)
-    monkeypatch.setattr(
-        sys, 'argv', ['brewt', '-p', passfile, '-f', gpg_file, '--debug']
-    )
-    _setup_gpg_mock(monkeypatch, returncodes=[1, 0])
-    brewt.main()
-    out = capsys.readouterr().out
-    assert 'Trying: x' in out
-    assert 'Trying: y' in out
 
 
 # ---------------------------------------------------------------------------

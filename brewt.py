@@ -19,8 +19,6 @@ def setup():
                         help="GPG file to decrypt (enables GPG mode).")
     parser.add_argument('--verbose', '-v', action='store_true',
                         help="Verbose output (GPG mode only).")
-    parser.add_argument('--debug', '-d', action='store_true',
-                        help="Print each password before using it.")
     parser.add_argument('--mixcase', '-c', action='store_true',
                         help="Try all upper/lower case variations.")
     args = parser.parse_args()
@@ -70,8 +68,6 @@ def main():
         password = False
         for word in generate_list(wordlist, options.minwords, maxwords,
                                   options.mixcase):
-            if options.debug:
-                print("Trying: %s" % word)
             result = subprocess.run(
                 ['gpg', '--batch', '--passphrase-fd', '0',
                  '--pinentry-mode', 'loopback', '--quiet', '--decrypt',
