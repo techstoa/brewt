@@ -46,7 +46,7 @@ def main():
     if options.file:
         import gnupg
         gpg = gnupg.GPG()
-        with open(options.file) as file_handle:
+        with open(options.file, 'rb') as file_handle:
             password = False
             for word in generate_list(wordlist, options.minwords, maxwords):
                 if options.debug:

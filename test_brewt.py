@@ -189,6 +189,20 @@ def test_main_gpg_password_found(monkeypatch, tmp_path, capsys):
     assert gpg_mock.decrypt_file.call_count == 2
 
 
+def test_main_gpg_file_opened_binary(monkeypatch, tmp_path):
+    """GPG file must be opened in binary mode (encrypted data is not UTF-8)."""
+    passfile = _make_passfile(tmp_path, ['pw'])
+    gpg_file = _make_gpg_file(tmp_path, content=bytes(range(256)))
+    monkeypatch.setattr(
+        sys, 'argv', ['brewt', '-p', passfile, '-f', gpg_file]
+    )
+    gpg_mock = _setup_gpg_mock(monkeypatch)
+    # Would raise UnicodeDecodeError if opened in text mode
+    brewt.main()
+    handle = gpg_mock.decrypt_file.call_args[0][0]
+    assert handle.mode == 'rb'
+
+
 def test_main_gpg_password_not_found(monkeypatch, tmp_path, capsys):
     """GPG mode prints 'Password not found' when no password works."""
     passfile = _make_passfile(tmp_path, ['a', 'b'])
