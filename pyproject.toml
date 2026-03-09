@@ -18,3 +18,9 @@ brewt = "brewt:main"
 
 [tool.setuptools]
 py-modules = ["brewt"]
+
+[tool.pytest.ini_options]
+markers = [
+    "e2e: end-to-end tests requiring GPG (deselect with '-m \"not e2e\"')",
+]
+addopts = "-m 'not e2e'"
