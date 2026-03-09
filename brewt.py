@@ -3,6 +3,7 @@
 """Script for generating password possibilities"""
 
 import subprocess
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 
 
 def setup():
@@ -21,6 +22,8 @@ def setup():
                         help="Verbose output (GPG mode only).")
     parser.add_argument('--mixcase', '-c', action='store_true',
                         help="Try all upper/lower case variations.")
+    parser.add_argument('--workers', '-w', default=4, type=int,
+                        help="Number of parallel GPG workers (default: 4).")
     args = parser.parse_args()
     return args
 
@@ -55,6 +58,21 @@ def generate_list(wordlist, min_words, max_words, mixcase=False):
                 yield password
 
 
+def try_password(word, gpg_file):
+    """Try decrypting a GPG file with the given password.
+
+    Returns (word, True) on success, (word, False) on failure.
+    """
+    result = subprocess.run(
+        ['gpg', '--batch', '--passphrase-fd', '0',
+         '--pinentry-mode', 'loopback', '--quiet', '--decrypt',
+         gpg_file],
+        input=word.encode(),
+        capture_output=True,
+    )
+    return (word, result.returncode == 0)
+
+
 def main():
     """Non-module logic for running as a commandline tool"""
     options = setup()
@@ -66,21 +84,35 @@ def main():
 
     if options.file:
         password = False
-        for word in generate_list(wordlist, options.minwords, maxwords,
-                                  options.mixcase):
-            result = subprocess.run(
-                ['gpg', '--batch', '--passphrase-fd', '0',
-                 '--pinentry-mode', 'loopback', '--quiet', '--decrypt',
-                 options.file],
-                input=word.encode(),
-                capture_output=True,
-            )
-            ok = result.returncode == 0
-            if options.verbose:
-                print(f"{word}: {ok}")
-            if ok:
-                password = word
-                break
+        gen = generate_list(wordlist, options.minwords, maxwords,
+                            options.mixcase)
+        with ThreadPoolExecutor(max_workers=options.workers) as executor:
+            pending = set()
+            for word in gen:
+                pending.add(executor.submit(try_password, word, options.file))
+                if len(pending) >= options.workers:
+                    break
+
+            while pending:
+                done, pending = wait(pending, return_when=FIRST_COMPLETED)
+                for future in done:
+                    word_result, ok = future.result()
+                    if options.verbose:
+                        print(f"{word_result}: {ok}")
+                    if ok:
+                        password = word_result
+
+                if password:
+                    for future in pending:
+                        future.cancel()
+                    break
+
+                for word in gen:
+                    pending.add(
+                        executor.submit(try_password, word, options.file))
+                    if len(pending) >= options.workers:
+                        break
+
         if password:
             print("Password is %s" % password)
         else:

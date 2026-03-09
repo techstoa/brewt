@@ -119,6 +119,7 @@ def test_setup_defaults(monkeypatch):
     assert args.file is None
     assert args.verbose is False
     assert args.mixcase is False
+    assert args.workers == 4
 
 
 def test_setup_all_args(monkeypatch):
@@ -127,7 +128,7 @@ def test_setup_all_args(monkeypatch):
         sys, 'argv',
         ['brewt', '-p', 'p.txt', '-f', 'f.gpg',
          '--minwords', '2', '--maxwords', '4', '--verbose',
-         '--mixcase']
+         '--mixcase', '--workers', '2']
     )
     args = brewt.setup()
     assert args.passfile == 'p.txt'
@@ -137,6 +138,7 @@ def test_setup_all_args(monkeypatch):
     assert args.verbose is True
     assert args.verbose is True
     assert args.mixcase is True
+    assert args.workers == 2
 
 
 # ---------------------------------------------------------------------------
@@ -225,7 +227,7 @@ def test_main_gpg_password_found(monkeypatch, tmp_path, capsys):
     passfile = _make_passfile(tmp_path, ['wrong', 'right'])
     gpg_file = _make_gpg_file(tmp_path)
     monkeypatch.setattr(
-        sys, 'argv', ['brewt', '-p', passfile, '-f', gpg_file]
+        sys, 'argv', ['brewt', '-p', passfile, '-f', gpg_file, '-w', '1']
     )
     run_mock = _setup_gpg_mock(monkeypatch, returncodes=[1, 0])
     brewt.main()
@@ -239,7 +241,7 @@ def test_main_gpg_uses_pinentry_loopback(monkeypatch, tmp_path):
     passfile = _make_passfile(tmp_path, ['pw'])
     gpg_file = _make_gpg_file(tmp_path)
     monkeypatch.setattr(
-        sys, 'argv', ['brewt', '-p', passfile, '-f', gpg_file]
+        sys, 'argv', ['brewt', '-p', passfile, '-f', gpg_file, '-w', '1']
     )
     run_mock = _setup_gpg_mock(monkeypatch, returncodes=[0])
     brewt.main()
@@ -253,7 +255,7 @@ def test_main_gpg_passphrase_via_stdin(monkeypatch, tmp_path):
     passfile = _make_passfile(tmp_path, ['secret'])
     gpg_file = _make_gpg_file(tmp_path)
     monkeypatch.setattr(
-        sys, 'argv', ['brewt', '-p', passfile, '-f', gpg_file]
+        sys, 'argv', ['brewt', '-p', passfile, '-f', gpg_file, '-w', '1']
     )
     run_mock = _setup_gpg_mock(monkeypatch, returncodes=[0])
     brewt.main()
@@ -269,7 +271,7 @@ def test_main_gpg_password_not_found(monkeypatch, tmp_path, capsys):
     passfile = _make_passfile(tmp_path, ['a', 'b'])
     gpg_file = _make_gpg_file(tmp_path)
     monkeypatch.setattr(
-        sys, 'argv', ['brewt', '-p', passfile, '-f', gpg_file]
+        sys, 'argv', ['brewt', '-p', passfile, '-f', gpg_file, '-w', '1']
     )
     _setup_gpg_mock(monkeypatch)  # default: all calls fail
     brewt.main()
@@ -281,7 +283,8 @@ def test_main_gpg_verbose(monkeypatch, tmp_path, capsys):
     passfile = _make_passfile(tmp_path, ['x', 'y'])
     gpg_file = _make_gpg_file(tmp_path)
     monkeypatch.setattr(
-        sys, 'argv', ['brewt', '-p', passfile, '-f', gpg_file, '--verbose']
+        sys, 'argv', ['brewt', '-p', passfile, '-f', gpg_file, '--verbose',
+                      '-w', '1']
     )
     _setup_gpg_mock(monkeypatch, returncodes=[1, 0])
     brewt.main()
@@ -296,7 +299,8 @@ def test_main_gpg_with_maxwords(monkeypatch, tmp_path, capsys):
     gpg_file = _make_gpg_file(tmp_path)
     monkeypatch.setattr(
         sys, 'argv',
-        ['brewt', '-p', passfile, '-f', gpg_file, '--maxwords', '1']
+        ['brewt', '-p', passfile, '-f', gpg_file, '--maxwords', '1',
+         '-w', '1']
     )
     run_mock = _setup_gpg_mock(monkeypatch, returncodes=[1, 1, 1])
     brewt.main()
@@ -320,3 +324,67 @@ def test_main_module_guard(monkeypatch, tmp_path):
     )
     runpy.run_path('brewt.py', run_name='__main__')
     assert 'hi' in printed
+
+
+# ---------------------------------------------------------------------------
+# try_password
+# ---------------------------------------------------------------------------
+
+def test_try_password_success(monkeypatch):
+    """try_password returns (word, True) when gpg succeeds."""
+    run_mock = mock.MagicMock(return_value=_make_proc(0))
+    monkeypatch.setattr('brewt.subprocess.run', run_mock)
+    word, ok = brewt.try_password('secret', 'file.gpg')
+    assert word == 'secret'
+    assert ok is True
+
+
+def test_try_password_failure(monkeypatch):
+    """try_password returns (word, False) when gpg fails."""
+    run_mock = mock.MagicMock(return_value=_make_proc(1))
+    monkeypatch.setattr('brewt.subprocess.run', run_mock)
+    word, ok = brewt.try_password('wrong', 'file.gpg')
+    assert word == 'wrong'
+    assert ok is False
+
+
+# ---------------------------------------------------------------------------
+# main — parallel workers
+# ---------------------------------------------------------------------------
+
+def test_main_gpg_parallel_finds_password(monkeypatch, tmp_path, capsys):
+    """GPG mode with multiple workers finds the correct password."""
+    passfile = _make_passfile(
+        tmp_path, ['wrong1', 'wrong2', 'right', 'wrong3'])
+    gpg_file = _make_gpg_file(tmp_path)
+    monkeypatch.setattr(
+        sys, 'argv',
+        ['brewt', '-p', passfile, '-f', gpg_file, '-w', '2']
+    )
+
+    def run_side_effect(cmd, input=None, capture_output=None):
+        word = input.decode() if input else ''
+        return _make_proc(0 if word == 'right' else 1)
+
+    monkeypatch.setattr('brewt.subprocess.run',
+                        mock.MagicMock(side_effect=run_side_effect))
+    brewt.main()
+    assert 'right' in capsys.readouterr().out
+
+
+def test_main_gpg_parallel_not_found(monkeypatch, tmp_path, capsys):
+    """GPG mode with multiple workers reports not found."""
+    passfile = _make_passfile(tmp_path, ['a', 'b', 'c'])
+    gpg_file = _make_gpg_file(tmp_path)
+    monkeypatch.setattr(
+        sys, 'argv',
+        ['brewt', '-p', passfile, '-f', gpg_file, '-w', '3']
+    )
+
+    def run_side_effect(cmd, input=None, capture_output=None):
+        return _make_proc(1)
+
+    monkeypatch.setattr('brewt.subprocess.run',
+                        mock.MagicMock(side_effect=run_side_effect))
+    brewt.main()
+    assert 'Password not found' in capsys.readouterr().out
