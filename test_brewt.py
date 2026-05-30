@@ -1,11 +1,20 @@
 """Tests for brewt.py"""
 import sys
-import subprocess
 import unittest.mock as mock
 
 import pytest
 
 import brewt
+
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(autouse=True)
+def _clear_active_procs():
+    brewt._active_procs.clear()
+    yield
 
 
 # ---------------------------------------------------------------------------
@@ -25,10 +34,30 @@ def _make_gpg_file(tmp_path, content=b'encrypted'):
     return str(p)
 
 
-def _make_proc(returncode):
-    result = mock.MagicMock(spec=subprocess.CompletedProcess)
-    result.returncode = returncode
-    return result
+def _make_popen_mock(returncode):
+    proc = mock.MagicMock()
+    proc.communicate.return_value = (b'', b'')
+    proc.returncode = returncode
+    return proc
+
+
+def _setup_gpg_mock(monkeypatch, returncodes=None):
+    """Mock subprocess.Popen; returncodes is a list of return codes per call.
+    If omitted, all calls return failure (rc=1).
+    The created proc mocks are available via ``popen_mock._mocks``."""
+    mocks = []
+    codes = list(returncodes) if returncodes else None
+
+    def side_effect(*args, **kwargs):
+        rc = codes.pop(0) if codes else 1
+        proc = _make_popen_mock(rc)
+        mocks.append(proc)
+        return proc
+
+    popen_mock = mock.MagicMock(side_effect=side_effect)
+    popen_mock._mocks = mocks
+    monkeypatch.setattr('brewt.subprocess.Popen', popen_mock)
+    return popen_mock
 
 
 # ---------------------------------------------------------------------------
@@ -99,20 +128,20 @@ def test_generate_list_mixcase():
 
 
 # ---------------------------------------------------------------------------
-# setup (argument parsing)
+# parse_args (argument parsing)
 # ---------------------------------------------------------------------------
 
-def test_setup_required_passfile(monkeypatch):
+def test_parse_args_required_passfile(monkeypatch):
     """--passfile is required; missing it exits with an error."""
     monkeypatch.setattr(sys, 'argv', ['brewt'])
     with pytest.raises(SystemExit):
-        brewt.setup()
+        brewt.parse_args()
 
 
-def test_setup_defaults(monkeypatch):
+def test_parse_args_defaults(monkeypatch):
     """Default values for optional arguments are applied correctly."""
     monkeypatch.setattr(sys, 'argv', ['brewt', '-p', 'somefile'])
-    args = brewt.setup()
+    args = brewt.parse_args()
     assert args.passfile == 'somefile'
     assert args.minwords == 1
     assert args.maxwords is None
@@ -122,7 +151,7 @@ def test_setup_defaults(monkeypatch):
     assert args.workers == 4
 
 
-def test_setup_all_args(monkeypatch):
+def test_parse_args_all_args(monkeypatch):
     """All arguments are parsed when provided."""
     monkeypatch.setattr(
         sys, 'argv',
@@ -130,12 +159,11 @@ def test_setup_all_args(monkeypatch):
          '--minwords', '2', '--maxwords', '4', '--verbose',
          '--mixcase', '--workers', '2']
     )
-    args = brewt.setup()
+    args = brewt.parse_args()
     assert args.passfile == 'p.txt'
     assert args.file == 'f.gpg'
     assert args.minwords == 2
     assert args.maxwords == 4
-    assert args.verbose is True
     assert args.verbose is True
     assert args.mixcase is True
     assert args.workers == 2
@@ -153,6 +181,8 @@ def test_main_without_maxwords(monkeypatch, tmp_path, capsys):
     output = capsys.readouterr().out.splitlines()
     assert 'cat' in output
     assert 'dog' in output
+    assert 'catdog' in output
+    assert 'dogcat' in output
 
 
 def test_main_with_maxwords(monkeypatch, tmp_path, capsys):
@@ -205,22 +235,20 @@ def test_main_list_mixcase(monkeypatch, tmp_path, capsys):
     assert sorted(output) == sorted(['ab', 'Ab', 'aB', 'AB'])
 
 
+def test_main_minwords_greater_than_maxwords(monkeypatch, tmp_path):
+    """main() raises ValueError when minwords >= effective maxwords."""
+    passfile = _make_passfile(tmp_path, ['a', 'b'])
+    monkeypatch.setattr(
+        sys, 'argv',
+        ['brewt', '-p', passfile, '--minwords', '3', '--maxwords', '2']
+    )
+    with pytest.raises(ValueError, match='minwords'):
+        brewt.main()
+
+
 # ---------------------------------------------------------------------------
 # main — GPG mode (--file provided)
 # ---------------------------------------------------------------------------
-
-def _setup_gpg_mock(monkeypatch, returncodes=None):
-    """Mock subprocess.run; returncodes is a list of return codes per call.
-    If omitted, all calls return failure (rc=1)."""
-    if returncodes is None:
-        run_mock = mock.MagicMock(return_value=_make_proc(1))
-    else:
-        run_mock = mock.MagicMock(
-            side_effect=[_make_proc(rc) for rc in returncodes]
-        )
-    monkeypatch.setattr('brewt.subprocess.run', run_mock)
-    return run_mock
-
 
 def test_main_gpg_password_found(monkeypatch, tmp_path, capsys):
     """GPG mode stops on the first matching password and prints it."""
@@ -229,25 +257,27 @@ def test_main_gpg_password_found(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(
         sys, 'argv', ['brewt', '-p', passfile, '-f', gpg_file, '-w', '1']
     )
-    run_mock = _setup_gpg_mock(monkeypatch, returncodes=[1, 0])
+    popen_mock = _setup_gpg_mock(monkeypatch, returncodes=[1, 0])
     brewt.main()
     out = capsys.readouterr().out
     assert 'right' in out
-    assert run_mock.call_count == 2
+    assert popen_mock.call_count == 2
 
 
 def test_main_gpg_uses_pinentry_loopback(monkeypatch, tmp_path):
-    """subprocess.run is called with --pinentry-mode loopback."""
+    """subprocess.Popen is called with --pinentry-mode loopback."""
     passfile = _make_passfile(tmp_path, ['pw'])
     gpg_file = _make_gpg_file(tmp_path)
     monkeypatch.setattr(
         sys, 'argv', ['brewt', '-p', passfile, '-f', gpg_file, '-w', '1']
     )
-    run_mock = _setup_gpg_mock(monkeypatch, returncodes=[0])
+    popen_mock = _setup_gpg_mock(monkeypatch, returncodes=[0])
     brewt.main()
-    cmd = run_mock.call_args[0][0]
+    cmd = popen_mock.call_args[0][0]
     assert '--pinentry-mode' in cmd
     assert 'loopback' in cmd
+    assert '--no-tty' in cmd
+    assert '--yes' in cmd
 
 
 def test_main_gpg_passphrase_via_stdin(monkeypatch, tmp_path):
@@ -257,11 +287,13 @@ def test_main_gpg_passphrase_via_stdin(monkeypatch, tmp_path):
     monkeypatch.setattr(
         sys, 'argv', ['brewt', '-p', passfile, '-f', gpg_file, '-w', '1']
     )
-    run_mock = _setup_gpg_mock(monkeypatch, returncodes=[0])
+    popen_mock = _setup_gpg_mock(monkeypatch, returncodes=[0])
     brewt.main()
-    kwargs = run_mock.call_args[1]
+    # The actual proc mocks are stored on the mock by _setup_gpg_mock.
+    proc_mock = popen_mock._mocks[0]
+    kwargs = proc_mock.communicate.call_args[1]
     assert kwargs['input'] == b'secret'
-    cmd = run_mock.call_args[0][0]
+    cmd = popen_mock.call_args[0][0]
     assert '--passphrase-fd' in cmd
     assert 'secret' not in cmd  # must NOT appear in the command line
 
@@ -302,10 +334,10 @@ def test_main_gpg_with_maxwords(monkeypatch, tmp_path, capsys):
         ['brewt', '-p', passfile, '-f', gpg_file, '--maxwords', '1',
          '-w', '1']
     )
-    run_mock = _setup_gpg_mock(monkeypatch, returncodes=[1, 1, 1])
+    popen_mock = _setup_gpg_mock(monkeypatch, returncodes=[1, 1, 1])
     brewt.main()
     # maxwords=1 → range(1, 2) → 3 single-word attempts
-    assert run_mock.call_count == 3
+    assert popen_mock.call_count == 3
     assert 'Password not found' in capsys.readouterr().out
 
 
@@ -332,8 +364,8 @@ def test_main_module_guard(monkeypatch, tmp_path):
 
 def test_try_password_success(monkeypatch):
     """try_password returns (word, True) when gpg succeeds."""
-    run_mock = mock.MagicMock(return_value=_make_proc(0))
-    monkeypatch.setattr('brewt.subprocess.run', run_mock)
+    popen_mock = mock.MagicMock(return_value=_make_popen_mock(0))
+    monkeypatch.setattr('brewt.subprocess.Popen', popen_mock)
     word, ok = brewt.try_password('secret', 'file.gpg')
     assert word == 'secret'
     assert ok is True
@@ -341,8 +373,8 @@ def test_try_password_success(monkeypatch):
 
 def test_try_password_failure(monkeypatch):
     """try_password returns (word, False) when gpg fails."""
-    run_mock = mock.MagicMock(return_value=_make_proc(1))
-    monkeypatch.setattr('brewt.subprocess.run', run_mock)
+    popen_mock = mock.MagicMock(return_value=_make_popen_mock(1))
+    monkeypatch.setattr('brewt.subprocess.Popen', popen_mock)
     word, ok = brewt.try_password('wrong', 'file.gpg')
     assert word == 'wrong'
     assert ok is False
@@ -362,12 +394,19 @@ def test_main_gpg_parallel_finds_password(monkeypatch, tmp_path, capsys):
         ['brewt', '-p', passfile, '-f', gpg_file, '-w', '2']
     )
 
-    def run_side_effect(cmd, input=None, capture_output=None):
-        word = input.decode() if input else ''
-        return _make_proc(0 if word == 'right' else 1)
+    def popen_side_effect(cmd, **kwargs):
+        proc = mock.MagicMock()
 
-    monkeypatch.setattr('brewt.subprocess.run',
-                        mock.MagicMock(side_effect=run_side_effect))
+        def communicate(input=None, timeout=None):
+            word = input.decode() if input else ''
+            proc.returncode = 0 if word == 'right' else 1
+            return (b'', b'')
+
+        proc.communicate = communicate
+        return proc
+
+    monkeypatch.setattr('brewt.subprocess.Popen',
+                        mock.MagicMock(side_effect=popen_side_effect))
     brewt.main()
     assert 'right' in capsys.readouterr().out
 
@@ -381,10 +420,13 @@ def test_main_gpg_parallel_not_found(monkeypatch, tmp_path, capsys):
         ['brewt', '-p', passfile, '-f', gpg_file, '-w', '3']
     )
 
-    def run_side_effect(cmd, input=None, capture_output=None):
-        return _make_proc(1)
+    def popen_side_effect(cmd, **kwargs):
+        proc = mock.MagicMock()
+        proc.communicate.return_value = (b'', b'')
+        proc.returncode = 1
+        return proc
 
-    monkeypatch.setattr('brewt.subprocess.run',
-                        mock.MagicMock(side_effect=run_side_effect))
+    monkeypatch.setattr('brewt.subprocess.Popen',
+                        mock.MagicMock(side_effect=popen_side_effect))
     brewt.main()
     assert 'Password not found' in capsys.readouterr().out
