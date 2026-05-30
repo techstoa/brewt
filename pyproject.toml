@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "brewt"
-version = "0.2.5"
+version = "0.2.6"
 description = "Python module for generating password lists from potential options"
 authors = ["Gregory Boyce <gregory@smoltech.us>"]
 readme = "README"
