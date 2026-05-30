@@ -1,26 +1,31 @@
-[build-system]
-requires = ["setuptools>=61"]
-build-backend = "setuptools.build_meta"
-
-[project]
+[tool.poetry]
 name = "brewt"
 version = "0.2.5"
 description = "Python module for generating password lists from potential options"
-authors = [{ name = "Gregory Boyce", email = "gregory@smoltech.us" }]
-requires-python = ">=3.8"
-dependencies = []
+authors = ["Gregory Boyce <gregory@smoltech.us>"]
+readme = "README"
+homepage = "https://github.com/techstoa/brewt"
+packages = [{include = "brewt.py"}]
 
-[project.urls]
-Homepage = "https://github.com/techstoa/brewt"
+[tool.poetry.dependencies]
+python = "^3.10"
 
-[project.scripts]
+[tool.poetry.scripts]
 brewt = "brewt:main"
 
-[tool.setuptools]
-py-modules = ["brewt"]
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
 
 [tool.pytest.ini_options]
 markers = [
     "e2e: end-to-end tests requiring GPG (deselect with '-m \"not e2e\"')",
 ]
 addopts = "-m 'not e2e'"
+
+[dependency-groups]
+dev = [
+    "pytest (>=8.3,<9.0)",
+    "flake8 (>=7.3.0,<8.0.0)",
+    "pyupgrade (>=3.21.2,<4.0.0)"
+]
